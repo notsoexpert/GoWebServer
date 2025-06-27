@@ -1,1 +1,4 @@
 gowebserver
+.env
+go.sum
+/internal/database

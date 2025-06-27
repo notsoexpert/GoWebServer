@@ -1,50 +1,36 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
-	"sync/atomic"
+	"os"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+
+	"github.com/notsoexpert/gowebserver/internal/admin"
+	"github.com/notsoexpert/gowebserver/internal/api"
+	"github.com/notsoexpert/gowebserver/internal/database"
 )
 
-type apiConfig struct {
-	fileserverHits atomic.Int32
-}
-
-func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cfg.fileserverHits.Add(1)
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (cfg *apiConfig) CountRequestsHandler(response http.ResponseWriter, request *http.Request) {
-	response.Header().Add("Content-Type", "text/html; charset=utf-8")
-	response.Write(fmt.Appendf([]byte{}, `
-	<html>
-		<body>
-    		<h1>Welcome, Chirpy Admin</h1>
-    		<p>Chirpy has been visited %d times!</p>
-		</body>
-	</html>
-	`, cfg.fileserverHits.Load()))
-}
-
-func (cfg *apiConfig) ResetRequestsHandler(response http.ResponseWriter, request *http.Request) {
-	cfg.fileserverHits.Store(0)
-}
-
-func ReadinessHandler(response http.ResponseWriter, request *http.Request) {
-	response.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	response.WriteHeader(200)
-	response.Write([]byte("OK"))
-}
-
 func main() {
-	var apiCfg apiConfig
+	var apiCfg admin.APIConfig
+	godotenv.Load(".env")
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		fmt.Println("Error: failed to open database")
+		return
+	}
+	apiCfg.DBQueries = database.New(db)
+
 	mux := http.NewServeMux()
 	handler := http.StripPrefix("/app", http.FileServer(http.Dir(".")))
-	mux.Handle("/app/", apiCfg.middlewareMetricsInc(handler))
-	mux.HandleFunc("GET /api/healthz", ReadinessHandler)
+	mux.Handle("/app/", apiCfg.MiddlewareMetricsInc(handler))
+	mux.HandleFunc("GET /api/healthz", api.ReadinessHandler)
+	mux.HandleFunc("POST /api/validate_chirp", api.ValidateChirpHandler)
+	mux.HandleFunc("POST /api/users", api.CreateUserHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.CountRequestsHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.ResetRequestsHandler)
 
