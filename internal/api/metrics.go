@@ -1,17 +1,9 @@
-package admin
+package api
 
 import (
 	"fmt"
 	"net/http"
-	"sync/atomic"
-
-	"github.com/notsoexpert/gowebserver/internal/database"
 )
-
-type APIConfig struct {
-	DBQueries      *database.Queries
-	fileserverHits atomic.Int32
-}
 
 func (cfg *APIConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -22,6 +14,7 @@ func (cfg *APIConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
 
 func (cfg *APIConfig) CountRequestsHandler(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("Content-Type", "text/html; charset=utf-8")
+	response.WriteHeader(200)
 	response.Write(fmt.Appendf([]byte{}, `
 	<html>
 		<body>
@@ -33,5 +26,11 @@ func (cfg *APIConfig) CountRequestsHandler(response http.ResponseWriter, request
 }
 
 func (cfg *APIConfig) ResetRequestsHandler(response http.ResponseWriter, request *http.Request) {
+	if cfg.Platform != "dev" {
+		response.WriteHeader(403)
+		return
+	}
+	response.WriteHeader(200)
 	cfg.fileserverHits.Store(0)
+	cfg.DBQueries.Reset(request.Context())
 }

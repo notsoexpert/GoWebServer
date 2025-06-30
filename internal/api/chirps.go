@@ -3,11 +3,14 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
-func ValidateChirpHandler(response http.ResponseWriter, request *http.Request) {
+func (cfg *APIConfig) ChirpsHandler(response http.ResponseWriter, request *http.Request) {
 	type requestParameters struct {
-		Body string `json:"body"`
+		Body   string    `json:"body"`
+		UserID uuid.UUID `json:"user_id"`
 	}
 
 	decoder := json.NewDecoder(request.Body)
@@ -24,13 +27,13 @@ func ValidateChirpHandler(response http.ResponseWriter, request *http.Request) {
 	}
 
 	respBody := responseParameters{
-		CleanedBody: cleanResponseBody(params.Body),
-		Valid:       true,
+		Body:   cleanResponseBody(params.Body),
+		UserID: params.UserID,
 	}
 	data, encErr := json.Marshal(respBody)
 	if encErr != nil {
 		respondWithError(response, 500, "Server failed to encode response")
 		return
 	}
-	respondWithJSON(response, 200, data)
+	respondWithJSON(response, 201, data)
 }

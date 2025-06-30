@@ -15,26 +15,35 @@ type User struct {
 	Email     string    `json:"email"`
 }
 
-func CreateUserHandler(response http.ResponseWriter, request *http.Request) {
+func (cfg *APIConfig) CreateUserHandler(response http.ResponseWriter, request *http.Request) {
 	type requestParameters struct {
 		Email string `json:"email"`
 	}
+
 	decoder := json.NewDecoder(request.Body)
 	params := requestParameters{}
-	err := decoder.Decode(&params)
-	if err != nil {
+
+	if err := decoder.Decode(&params); err != nil {
 		respondWithError(response, 400, "Something went wrong")
 		return
 	}
 
-	respBody := responseParameters{
-		CleanedBody: cleanResponseBody(params.Body),
-		Valid:       true,
+	sqlUser, err := cfg.DBQueries.CreateUser(request.Context(), params.Email)
+	if err != nil {
+		respondWithError(response, 400, "Server failed to create user")
+		return
 	}
-	data, encErr := json.Marshal(respBody)
+
+	var user User = User{
+		ID:        sqlUser.ID,
+		CreatedAt: sqlUser.CreatedAt,
+		UpdatedAt: sqlUser.UpdatedAt,
+		Email:     sqlUser.Email,
+	}
+	data, encErr := json.Marshal(user)
 	if encErr != nil {
 		respondWithError(response, 500, "Server failed to encode response")
 		return
 	}
-	respondWithJSON(response, 200, data)
+	respondWithJSON(response, 201, data)
 }

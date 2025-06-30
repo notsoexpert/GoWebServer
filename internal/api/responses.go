@@ -4,16 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
-type requestParameters struct {
-	Body string `json:"body"`
-}
-
 type responseParameters struct {
-	CleanedBody string `json:"cleaned_body,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Valid       bool   `json:"valid"`
+	Body   string    `json:"body,omitempty"`
+	UserID uuid.UUID `json:"user_id"`
+	Error  string    `json:"error,omitempty"`
 }
 
 func cleanResponseBody(body string) string {
@@ -30,7 +28,6 @@ func cleanResponseBody(body string) string {
 func respondWithError(response http.ResponseWriter, code int, msg string) {
 	respBody := responseParameters{
 		Error: msg,
-		Valid: false,
 	}
 	data, encErr := json.Marshal(respBody)
 	if encErr != nil {
