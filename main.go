@@ -29,8 +29,11 @@ func main() {
 	handler := http.StripPrefix("/app", http.FileServer(http.Dir(".")))
 	mux.Handle("/app/", apiCfg.MiddlewareMetricsInc(handler))
 	mux.HandleFunc("GET /api/healthz", api.ReadinessHandler)
-	mux.HandleFunc("POST /api/chirps", apiCfg.ChirpsHandler)
+	mux.HandleFunc("GET /api/chirps", apiCfg.GetChirpsHandler)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.GetChirpHandler)
+	mux.HandleFunc("POST /api/chirps", apiCfg.PostChirpsHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.CreateUserHandler)
+	mux.HandleFunc("POST /api/login", apiCfg.LoginHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.CountRequestsHandler)
 	mux.HandleFunc("POST /admin/reset", apiCfg.ResetRequestsHandler)
 

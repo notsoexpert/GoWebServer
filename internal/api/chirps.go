@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -18,7 +19,17 @@ type Chirp struct {
 	Error     string    `json:"error,omitempty"`
 }
 
-func (cfg *APIConfig) ChirpsHandler(response http.ResponseWriter, request *http.Request) {
+func ReadyChirpForJSON(sqlChirp database.Chirp) Chirp {
+	return Chirp{
+		ID:        sqlChirp.ID,
+		CreatedAt: sqlChirp.CreatedAt,
+		UpdatedAt: sqlChirp.UpdatedAt,
+		Body:      sqlChirp.Body,
+		UserID:    sqlChirp.UserID.UUID,
+	}
+}
+
+func (cfg *APIConfig) PostChirpsHandler(response http.ResponseWriter, request *http.Request) {
 	type requestParameters struct {
 		Body   string    `json:"body"`
 		UserID uuid.UUID `json:"user_id"`
@@ -46,13 +57,7 @@ func (cfg *APIConfig) ChirpsHandler(response http.ResponseWriter, request *http.
 		return
 	}
 
-	respBody := Chirp{
-		ID:        sqlChirp.ID,
-		CreatedAt: sqlChirp.CreatedAt,
-		UpdatedAt: sqlChirp.UpdatedAt,
-		Body:      sqlChirp.Body,
-		UserID:    sqlChirp.UserID.UUID,
-	}
+	respBody := ReadyChirpForJSON(sqlChirp)
 
 	data, encErr := json.Marshal(respBody)
 	if encErr != nil {
@@ -60,4 +65,63 @@ func (cfg *APIConfig) ChirpsHandler(response http.ResponseWriter, request *http.
 		return
 	}
 	respondWithJSON(response, 201, data)
+}
+
+func (cfg *APIConfig) GetChirpsHandler(response http.ResponseWriter, request *http.Request) {
+	sqlChirps, err := cfg.DBQueries.GetChirps(request.Context())
+	if err != nil {
+		respondWithError(response, 400, "Server failed to get chirp records")
+		return
+	}
+
+	var respBody []Chirp
+
+	for _, sqlChirp := range sqlChirps {
+		respBody = append(respBody, ReadyChirpForJSON(sqlChirp))
+	}
+
+	data, encErr := json.Marshal(respBody)
+	if encErr != nil {
+		respondWithError(response, 500, "Server failed to encode response")
+		return
+	}
+	respondWithJSON(response, 200, data)
+}
+
+func (cfg *APIConfig) GetChirpHandler(response http.ResponseWriter, request *http.Request) {
+	sqlChirps, err := cfg.DBQueries.GetChirps(request.Context())
+	if err != nil {
+		respondWithError(response, 400, "Server failed to get chirp records")
+		return
+	}
+
+	uuid, err := uuid.Parse(request.PathValue("chirpID"))
+	if err != nil {
+		respondWithError(response, 404, "Chirp not found")
+		return
+	}
+
+	var foundChirp Chirp
+	err = errors.New("Chirp not found")
+	for _, sqlChirp := range sqlChirps {
+		chirp := ReadyChirpForJSON(sqlChirp)
+
+		if chirp.ID == uuid {
+			foundChirp = chirp
+			err = nil
+			break
+		}
+	}
+
+	if err != nil {
+		respondWithError(response, 404, err.Error())
+		return
+	}
+
+	data, encErr := json.Marshal(foundChirp)
+	if encErr != nil {
+		respondWithError(response, 500, "Server failed to encode response")
+		return
+	}
+	respondWithJSON(response, 200, data)
 }
