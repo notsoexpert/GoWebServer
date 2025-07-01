@@ -16,6 +16,7 @@ func main() {
 	var apiCfg api.APIConfig
 	godotenv.Load(".env")
 	apiCfg.Platform = os.Getenv("PLATFORM")
+	apiCfg.Secret = os.Getenv("SECRET")
 	dbURL := os.Getenv("DB_URL")
 	fmt.Println("Connecting to ", dbURL)
 	db, err := sql.Open("postgres", dbURL)

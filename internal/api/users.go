@@ -15,11 +15,13 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	Token     string    `json:"token"`
 }
 
 type credentials struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	ExpiresIn int64  `json:"expires_in_seconds,omitempty"`
 }
 
 func (cfg *APIConfig) CreateUserHandler(response http.ResponseWriter, request *http.Request) {
@@ -67,6 +69,11 @@ func (cfg *APIConfig) LoginHandler(response http.ResponseWriter, request *http.R
 		return
 	}
 
+	expiresIn := 1 * time.Hour
+	if params.ExpiresIn != 0 && (time.Duration(params.ExpiresIn)*time.Second) > time.Hour {
+		expiresIn = time.Duration(params.ExpiresIn) * time.Second
+	}
+
 	sqlUser, err := cfg.DBQueries.GetUserByEmail(request.Context(), params.Email)
 	if err != nil {
 		respondWithError(response, 401, "Incorrect email or password")
@@ -78,11 +85,17 @@ func (cfg *APIConfig) LoginHandler(response http.ResponseWriter, request *http.R
 		return
 	}
 
+	token, err := auth.MakeJWT(sqlUser.ID, cfg.Secret, expiresIn)
+	if err != nil {
+		respondWithError(response, 500, "Server failed to authorize token")
+	}
+
 	var user User = User{
 		ID:        sqlUser.ID,
 		CreatedAt: sqlUser.CreatedAt,
 		UpdatedAt: sqlUser.UpdatedAt,
 		Email:     sqlUser.Email,
+		Token:     token,
 	}
 	data, encErr := json.Marshal(user)
 	if encErr != nil {

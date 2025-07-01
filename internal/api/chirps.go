@@ -3,10 +3,12 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/notsoexpert/gowebserver/internal/auth"
 	"github.com/notsoexpert/gowebserver/internal/database"
 )
 
@@ -31,8 +33,7 @@ func ReadyChirpForJSON(sqlChirp database.Chirp) Chirp {
 
 func (cfg *APIConfig) PostChirpsHandler(response http.ResponseWriter, request *http.Request) {
 	type requestParameters struct {
-		Body   string    `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
 	}
 
 	decoder := json.NewDecoder(request.Body)
@@ -43,6 +44,18 @@ func (cfg *APIConfig) PostChirpsHandler(response http.ResponseWriter, request *h
 		return
 	}
 
+	token, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(response, 401, "Malformed request")
+		return
+	}
+
+	validatedID, err := auth.ValidateJWT(token, cfg.Secret)
+	if err != nil {
+		respondWithError(response, 401, fmt.Sprintf("Unauthorized - %v", err.Error()))
+		return
+	}
+
 	if len(params.Body) > 140 {
 		respondWithError(response, 400, "Chirp is too long")
 		return
@@ -50,7 +63,7 @@ func (cfg *APIConfig) PostChirpsHandler(response http.ResponseWriter, request *h
 
 	sqlChirp, err := cfg.DBQueries.PostChirp(request.Context(), database.PostChirpParams{
 		Body:   cleanResponseBody(params.Body),
-		UserID: uuid.NullUUID{UUID: params.UserID, Valid: true},
+		UserID: uuid.NullUUID{UUID: validatedID, Valid: true},
 	})
 	if err != nil {
 		respondWithError(response, 400, "Server failed to create chirp record")

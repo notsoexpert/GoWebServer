@@ -10,4 +10,5 @@ type APIConfig struct {
 	DBQueries      *database.Queries
 	fileserverHits atomic.Int32
 	Platform       string
+	Secret         string
 }
