@@ -11,4 +11,5 @@ type APIConfig struct {
 	fileserverHits atomic.Int32
 	Platform       string
 	Secret         string
+	PolkaKey       string
 }

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -87,9 +89,42 @@ func (cfg *APIConfig) GetChirpsHandler(response http.ResponseWriter, request *ht
 		return
 	}
 
+	urlAuthorID := request.URL.Query().Get("author_id")
+	var authorID uuid.NullUUID
+	if len(urlAuthorID) != 0 {
+		uid, err := uuid.Parse(urlAuthorID)
+		if err == nil {
+			authorID = uuid.NullUUID{UUID: uid, Valid: true}
+		}
+	}
+
+	sortType := "asc"
+	urlSort := request.URL.Query().Get("sort")
+	if len(urlSort) != 0 {
+		if strings.Contains(urlSort, "desc") {
+			sortType = "desc"
+		}
+	}
+
+	switch sortType {
+	case "asc":
+		slices.SortFunc(sqlChirps, func(a database.Chirp, b database.Chirp) int {
+			return a.CreatedAt.Compare(b.CreatedAt)
+		})
+	case "desc":
+		slices.SortFunc(sqlChirps, func(a database.Chirp, b database.Chirp) int {
+			return -a.CreatedAt.Compare(b.CreatedAt)
+		})
+	}
+
 	var respBody []Chirp
 
 	for _, sqlChirp := range sqlChirps {
+		if authorID.Valid {
+			if sqlChirp.UserID != authorID {
+				continue
+			}
+		}
 		respBody = append(respBody, ReadyChirpForJSON(sqlChirp))
 	}
 
@@ -137,4 +172,59 @@ func (cfg *APIConfig) GetChirpHandler(response http.ResponseWriter, request *htt
 		return
 	}
 	respondWithJSON(response, 200, data)
+}
+
+func (cfg *APIConfig) DeleteChirpHandler(response http.ResponseWriter, request *http.Request) {
+	token, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(response, 401, "Malformed request")
+		return
+	}
+
+	validatedID, err := auth.ValidateJWT(token, cfg.Secret)
+	if err != nil {
+		respondWithError(response, 403, fmt.Sprintf("Unauthorized - %v", err.Error()))
+		return
+	}
+
+	sqlChirps, err := cfg.DBQueries.GetChirps(request.Context())
+	if err != nil {
+		respondWithError(response, 400, "Server failed to get chirp records")
+		return
+	}
+
+	uuid, err := uuid.Parse(request.PathValue("chirpID"))
+	if err != nil {
+		respondWithError(response, 404, "Chirp not found")
+		return
+	}
+
+	var foundChirp Chirp
+	err = errors.New("Chirp not found")
+	for _, sqlChirp := range sqlChirps {
+		chirp := ReadyChirpForJSON(sqlChirp)
+
+		if chirp.ID == uuid {
+			foundChirp = chirp
+			err = nil
+			break
+		}
+	}
+
+	if foundChirp.UserID != validatedID {
+		respondWithError(response, 403, "Action not permitted")
+		return
+	}
+
+	if err != nil {
+		respondWithError(response, 404, err.Error())
+		return
+	}
+
+	err = cfg.DBQueries.DeleteChirp(request.Context(), foundChirp.ID)
+	if err != nil {
+		respondWithError(response, 404, "Chirp not found")
+		return
+	}
+	response.WriteHeader(204)
 }

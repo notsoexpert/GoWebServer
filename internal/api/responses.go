@@ -40,6 +40,8 @@ func respondWithError(response http.ResponseWriter, code int, msg string) {
 
 func respondWithJSON(response http.ResponseWriter, code int, payload interface{}) {
 	response.Header().Add("Content-Type", "application/json")
-	response.WriteHeader(code)
+	if code != 200 {
+		response.WriteHeader(code)
+	}
 	response.Write(payload.([]byte))
 }
